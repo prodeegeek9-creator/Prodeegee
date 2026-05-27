@@ -728,7 +728,7 @@ async function handleClassMsg(text, typId) {
 // N8N CALL
 // ═══════════════════════════════════════════════════
 async function callN8N(payload) {
-  const body = { ...payload, sessionId: state.sessionId, ip: state.ip };
+  const body = { ...payload, phase: state.phase, sessionId: state.sessionId, ip: state.ip };
   const resp = await fetch(WEBHOOK, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
