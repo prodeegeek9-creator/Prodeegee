@@ -733,8 +733,15 @@ async function handleClassMsg(text, typId) {
     sessionId: state.sessionId
   });
   removeTyping(typId);
-  await addBotMessages(messages);
-  if (imageUrl) addImageMsg(imageUrl);
+  if (imageUrl && messages.length > 0) {
+    // First bubble, then image, then the rest
+    await addBotMessages(messages.slice(0, 1));
+    addImageMsg(imageUrl);
+    if (messages.length > 1) await addBotMessages(messages.slice(1));
+  } else {
+    await addBotMessages(messages);
+    if (imageUrl) addImageMsg(imageUrl);
+  }
 }
 
 // ═══════════════════════════════════════════════════
