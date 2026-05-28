@@ -724,7 +724,7 @@ async function handleTopicReply(text, typId) {
 }
 
 async function handleClassMsg(text, typId) {
-  const { messages } = await callN8N({
+  const { messages, imageUrl } = await callN8N({
     type: 'class_message',
     message: text,
     subject: state.subject,
@@ -734,6 +734,7 @@ async function handleClassMsg(text, typId) {
   });
   removeTyping(typId);
   await addBotMessages(messages);
+  if (imageUrl) addImageMsg(imageUrl);
 }
 
 // ═══════════════════════════════════════════════════
@@ -747,11 +748,17 @@ async function callN8N(payload) {
     body: JSON.stringify(body)
   });
   if (!resp.ok) throw new Error('n8n error ' + resp.status);
-  const data = await resp.json();
+
+  // Handle both JSON and plain text responses
+  const raw = await resp.text();
+  let data;
+  try { data = JSON.parse(raw); } catch(_) { data = raw; }
+
   return {
     reply:    extractReply(data),
     messages: extractMessages(data),
-    phase:    data.phase || null
+    phase:    typeof data === 'object' ? (data.phase || null) : null,
+    imageUrl: typeof data === 'object' ? (data.imageUrl || null) : null
   };
 }
 
@@ -762,13 +769,21 @@ function extractReply(data) {
     || 'Got it.';
 }
 
-// Returns array of message strings — handles both single reply and messages[]
+// Returns array of message strings — handles array, single string, or \n-separated string
 function extractMessages(data) {
-  if (typeof data === 'string') return [data];
-  if (Array.isArray(data.messages) && data.messages.length) return data.messages;
-  if (Array.isArray(data.replies) && data.replies.length) return data.replies.map(r => r.message || r);
+  if (typeof data === 'string') return splitMessages(data);
+  if (Array.isArray(data.messages) && data.messages.length) {
+    // Could be array of strings or one big string inside the array
+    if (data.messages.length === 1) return splitMessages(data.messages[0]);
+    return data.messages.map(String).filter(m => m.trim());
+  }
+  if (Array.isArray(data.replies) && data.replies.length) return data.replies.map(r => r.message || r).filter(Boolean);
   const single = extractReply(data);
-  return single ? [single] : [];
+  return single ? splitMessages(single) : [];
+}
+
+function splitMessages(text) {
+  return String(text).split(/\n{2,}/).map(m => m.trim()).filter(m => m.length > 0);
 }
 
 // Renders multiple bot messages with a natural delay between each
@@ -925,6 +940,20 @@ function addUserMsg(text) {
     </div>
   `;
   msgs.appendChild(div);
+  scrollBottom();
+}
+
+function addImageMsg(url) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = 'Diagram';
+  img.style.cssText = 'max-width:100%;border-radius:6px;margin-top:4px;display:block;';
+  img.onerror = () => { wrap.remove(); };
+  wrap.appendChild(img);
+  msgs.appendChild(wrap);
   scrollBottom();
 }
 
