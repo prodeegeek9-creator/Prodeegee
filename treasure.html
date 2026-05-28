@@ -724,7 +724,7 @@ async function handleTopicReply(text, typId) {
 }
 
 async function handleClassMsg(text, typId) {
-  const { reply } = await callN8N({
+  const { messages } = await callN8N({
     type: 'class_message',
     message: text,
     subject: state.subject,
@@ -733,7 +733,7 @@ async function handleClassMsg(text, typId) {
     sessionId: state.sessionId
   });
   removeTyping(typId);
-  addBotMsg(reply);
+  await addBotMessages(messages);
 }
 
 // ═══════════════════════════════════════════════════
@@ -749,17 +749,39 @@ async function callN8N(payload) {
   if (!resp.ok) throw new Error('n8n error ' + resp.status);
   const data = await resp.json();
   return {
-    reply: extractReply(data),
-    phase: data.phase || null
+    reply:    extractReply(data),
+    messages: extractMessages(data),
+    phase:    data.phase || null
   };
 }
 
 function extractReply(data) {
-  // Handle all common n8n response shapes
   if (typeof data === 'string') return data;
   return data.reply || data.response || data.message || data.output || data.text
     || (Array.isArray(data) && (data[0]?.reply || data[0]?.response || data[0]?.message))
     || 'Got it.';
+}
+
+// Returns array of message strings — handles both single reply and messages[]
+function extractMessages(data) {
+  if (typeof data === 'string') return [data];
+  if (Array.isArray(data.messages) && data.messages.length) return data.messages;
+  if (Array.isArray(data.replies) && data.replies.length) return data.replies.map(r => r.message || r);
+  const single = extractReply(data);
+  return single ? [single] : [];
+}
+
+// Renders multiple bot messages with a natural delay between each
+async function addBotMessages(messages, extraEl) {
+  for (let i = 0; i < messages.length; i++) {
+    if (i > 0) {
+      // Show typing indicator briefly between messages
+      const typId = showTyping();
+      await new Promise(r => setTimeout(r, 600 + messages[i].length * 10));
+      removeTyping(typId);
+    }
+    addBotMsg(messages[i], i === messages.length - 1 ? extraEl : null);
+  }
 }
 
 // ═══════════════════════════════════════════════════
