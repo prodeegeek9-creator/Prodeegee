@@ -577,7 +577,7 @@ async function boot() {
     show('chat');
     setPhaseUI(state.phase);
     addBotMsg('Welcome back. Your session is resuming — ' + fmtSecs(state.secsLeft) + ' remaining. Pick up where you left off.');
-    enableInput(state.phase === 'class');
+    enableInput(true);
     if (state.phase === 'class') startTimer();
     return;
   }
@@ -616,7 +616,7 @@ async function startSession() {
   // Kick off — June greets and asks for subject
   const typId = showTyping();
   try {
-    const reply = await callN8N({ type: 'session_start', message: 'START' });
+    const { reply } = await callN8N({ type: 'session_start', message: 'START' });
     removeTyping(typId);
     addBotMsg(reply, buildSubjectChips());
   } catch(_) {
@@ -688,17 +688,25 @@ async function handleSubjectReply(text, typId) {
   state.subject = text;
   saveSession({ subject: text });
 
-  const reply = await callN8N({ type: 'subject_choice', message: text, subject: text });
+  const { reply, phase } = await callN8N({ type: 'subject_choice', message: text, subject: text });
   removeTyping(typId);
-  addBotMsg(reply, buildTopicChips(text));
-  setPhase('topic');
+
+  if (phase === 'class') {
+    addBotMsg(reply);
+    setPhase('class');
+    startTimer();
+    addSysMsg('Class started · 30 minutes');
+  } else {
+    addBotMsg(reply, buildTopicChips(text));
+    setPhase('topic');
+  }
 }
 
 async function handleTopicReply(text, typId) {
   state.topic = text;
   saveSession({ topic: text });
 
-  const reply = await callN8N({
+  const { reply, phase } = await callN8N({
     type: 'topic_choice',
     message: text,
     subject: state.subject,
@@ -706,13 +714,17 @@ async function handleTopicReply(text, typId) {
   });
   removeTyping(typId);
   addBotMsg(reply);
-  setPhase('class');
-  startTimer();
-  addSysMsg('Class started · 30 minutes');
+
+  if (phase === 'class') {
+    setPhase('class');
+    startTimer();
+    addSysMsg('Class started · 30 minutes');
+  }
+  // if n8n returns subject_selection, stay in topic phase — user needs to clarify
 }
 
 async function handleClassMsg(text, typId) {
-  const reply = await callN8N({
+  const { reply } = await callN8N({
     type: 'class_message',
     message: text,
     subject: state.subject,
@@ -736,7 +748,10 @@ async function callN8N(payload) {
   });
   if (!resp.ok) throw new Error('n8n error ' + resp.status);
   const data = await resp.json();
-  return extractReply(data);
+  return {
+    reply: extractReply(data),
+    phase: data.phase || null
+  };
 }
 
 function extractReply(data) {
