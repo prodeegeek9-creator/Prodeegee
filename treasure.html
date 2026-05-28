@@ -724,7 +724,7 @@ async function handleTopicReply(text, typId) {
 }
 
 async function handleClassMsg(text, typId) {
-  const { messages } = await callN8N({
+  const { messages, imageUrl } = await callN8N({
     type: 'class_message',
     message: text,
     subject: state.subject,
@@ -734,6 +734,7 @@ async function handleClassMsg(text, typId) {
   });
   removeTyping(typId);
   await addBotMessages(messages);
+  if (imageUrl) addImageMsg(imageUrl);
 }
 
 // ═══════════════════════════════════════════════════
@@ -756,7 +757,8 @@ async function callN8N(payload) {
   return {
     reply:    extractReply(data),
     messages: extractMessages(data),
-    phase:    typeof data === 'object' ? (data.phase || null) : null
+    phase:    typeof data === 'object' ? (data.phase || null) : null,
+    imageUrl: typeof data === 'object' ? (data.imageUrl || null) : null
   };
 }
 
@@ -938,6 +940,20 @@ function addUserMsg(text) {
     </div>
   `;
   msgs.appendChild(div);
+  scrollBottom();
+}
+
+function addImageMsg(url) {
+  const msgs = document.getElementById('messages');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg bot';
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = 'Diagram';
+  img.style.cssText = 'max-width:100%;border-radius:6px;margin-top:4px;display:block;';
+  img.onerror = () => { wrap.remove(); };
+  wrap.appendChild(img);
+  msgs.appendChild(wrap);
   scrollBottom();
 }
 
