@@ -747,11 +747,16 @@ async function callN8N(payload) {
     body: JSON.stringify(body)
   });
   if (!resp.ok) throw new Error('n8n error ' + resp.status);
-  const data = await resp.json();
+
+  // Handle both JSON and plain text responses
+  const raw = await resp.text();
+  let data;
+  try { data = JSON.parse(raw); } catch(_) { data = raw; }
+
   return {
     reply:    extractReply(data),
     messages: extractMessages(data),
-    phase:    data.phase || null
+    phase:    typeof data === 'object' ? (data.phase || null) : null
   };
 }
 
@@ -762,13 +767,21 @@ function extractReply(data) {
     || 'Got it.';
 }
 
-// Returns array of message strings — handles both single reply and messages[]
+// Returns array of message strings — handles array, single string, or \n-separated string
 function extractMessages(data) {
-  if (typeof data === 'string') return [data];
-  if (Array.isArray(data.messages) && data.messages.length) return data.messages;
-  if (Array.isArray(data.replies) && data.replies.length) return data.replies.map(r => r.message || r);
+  if (typeof data === 'string') return splitMessages(data);
+  if (Array.isArray(data.messages) && data.messages.length) {
+    // Could be array of strings or one big string inside the array
+    if (data.messages.length === 1) return splitMessages(data.messages[0]);
+    return data.messages.map(String).filter(m => m.trim());
+  }
+  if (Array.isArray(data.replies) && data.replies.length) return data.replies.map(r => r.message || r).filter(Boolean);
   const single = extractReply(data);
-  return single ? [single] : [];
+  return single ? splitMessages(single) : [];
+}
+
+function splitMessages(text) {
+  return String(text).split(/\n{2,}/).map(m => m.trim()).filter(m => m.length > 0);
 }
 
 // Renders multiple bot messages with a natural delay between each
