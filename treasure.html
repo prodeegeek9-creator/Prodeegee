@@ -150,6 +150,13 @@ nav{
 .rule strong{color:var(--bright);}
 .rule .w{color:var(--acc);}
 .gate-sep{border:none;border-top:1px solid var(--border2);margin:0 0 1.6rem;}
+.reg-form{display:flex;flex-direction:column;gap:.9rem;margin-bottom:1.4rem;}
+.reg-field{display:flex;flex-direction:column;gap:.35rem;}
+.reg-label{font-size:.65rem;letter-spacing:.12em;color:var(--accent);font-family:var(--mono);}
+.reg-input{background:var(--bg2);border:1px solid var(--border2);color:var(--fg);font-family:var(--mono);font-size:.82rem;padding:.55rem .75rem;border-radius:4px;outline:none;transition:border-color .2s;}
+.reg-input:focus{border-color:var(--accent);}
+.reg-input::placeholder{color:var(--fg3);}
+.reg-error{font-size:.72rem;color:#ff6b6b;min-height:1rem;font-family:var(--mono);}
 .btn{
   padding:0.85rem 1.6rem;
   font-family:var(--term);font-size:0.74rem;letter-spacing:0.12em;
@@ -442,6 +449,21 @@ nav{
           </div>
         </div>
         <hr class="gate-sep">
+        <div class="reg-form">
+          <div class="reg-field">
+            <label class="reg-label" for="regName">FULL NAME</label>
+            <input class="reg-input" id="regName" type="text" placeholder="Your full name" autocomplete="name" maxlength="80">
+          </div>
+          <div class="reg-field">
+            <label class="reg-label" for="regPhone">PHONE NUMBER</label>
+            <input class="reg-input" id="regPhone" type="tel" placeholder="+1 234 567 8900" autocomplete="tel" maxlength="20">
+          </div>
+          <div class="reg-field">
+            <label class="reg-label" for="regEmail">EMAIL ADDRESS</label>
+            <input class="reg-input" id="regEmail" type="email" placeholder="you@example.com" autocomplete="email" maxlength="120">
+          </div>
+          <div class="reg-error" id="regError"></div>
+        </div>
         <button class="btn btn-primary" id="startBtn" onclick="startSession()">
           [ START SESSION WITH JUNE ]
         </button>
@@ -541,6 +563,9 @@ let state = {
   ip: 'unknown',
   subject: null,
   topic: null,
+  userName: null,
+  userPhone: null,
+  userEmail: null,
   secsLeft: TOTAL_SECS,
   timerStarted: false,
   busy: false,
@@ -568,9 +593,12 @@ async function boot() {
     const elapsed = Math.floor((Date.now() - stored.startedAt) / 1000);
     state.secsLeft = Math.max(0, TOTAL_SECS - elapsed);
     state.sessionId = stored.id;
-    state.phase = stored.phase || 'welcome';
-    state.subject = stored.subject || null;
-    state.topic   = stored.topic || null;
+    state.phase     = stored.phase || 'welcome';
+    state.subject   = stored.subject || null;
+    state.topic     = stored.topic   || null;
+    state.userName  = stored.userName  || null;
+    state.userPhone = stored.userPhone || null;
+    state.userEmail = stored.userEmail || null;
 
     if (state.secsLeft <= 0) { markDone(); show('blocked'); return; }
 
@@ -603,12 +631,29 @@ function markDone() {
 // START SESSION
 // ═══════════════════════════════════════════════════
 async function startSession() {
+  const nameVal  = document.getElementById('regName').value.trim();
+  const phoneVal = document.getElementById('regPhone').value.trim();
+  const emailVal = document.getElementById('regEmail').value.trim();
+  const errEl    = document.getElementById('regError');
+
+  errEl.textContent = '';
+  if (!nameVal)  { errEl.textContent = '// NAME is required'; return; }
+  if (!phoneVal) { errEl.textContent = '// PHONE NUMBER is required'; return; }
+  if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+    errEl.textContent = '// Valid EMAIL ADDRESS is required'; return;
+  }
+
+  state.userName  = nameVal;
+  state.userPhone = phoneVal;
+  state.userEmail = emailVal;
+
   const btn = document.getElementById('startBtn');
   btn.disabled = true;
   btn.textContent = '[ STARTING... ]';
 
   state.sessionId = 'jun_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
-  saveSession({ id: state.sessionId, status: 'active', startedAt: Date.now(), phase: 'welcome' });
+  saveSession({ id: state.sessionId, status: 'active', startedAt: Date.now(), phase: 'welcome',
+    userName: state.userName, userPhone: state.userPhone, userEmail: state.userEmail });
 
   show('chat');
   setPhaseUI('welcome');
@@ -748,7 +793,8 @@ async function handleClassMsg(text, typId) {
 // N8N CALL
 // ═══════════════════════════════════════════════════
 async function callN8N(payload) {
-  const body = { ...payload, phase: state.phase, sessionId: state.sessionId, ip: state.ip };
+  const body = { ...payload, phase: state.phase, sessionId: state.sessionId, ip: state.ip,
+    userName: state.userName, userPhone: state.userPhone, userEmail: state.userEmail };
   const resp = await fetch(WEBHOOK, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
